@@ -1,7 +1,7 @@
 import random
 import pandas
 from numpy import arange
-from ggplot import *
+from matplotlib import pyplot as plt
 
 ### Sequence ###
 
@@ -226,9 +226,12 @@ class Population(object):
         self.evolve()
         self.generations += 1
         
-        #reporter = StepReporter(self.sequence, self.population)
-        #reporter.plot_agents()
-
+        # diagnostic
+        if self.generations % 100 == 0:  
+            print [x.chromosome for x in self.population]
+            reporter = StepReporter(self.sequence, self.population)
+            reporter.plot_agents()
+            
     def evolve(self):
         
         for individual in self.population[self.elite:]:
@@ -298,11 +301,11 @@ class StepReporter(object):
         maxvalue = float(max(max(self.data["contigs"]), max(self.data["shannon"])))
         slices = maxvalue / len(self.population)
         
-        yrange = arange(1.0, maxvalue + 1.0, slices) 
+        yrange = arange(1.0, maxvalue + 1.0, slices)
 
-        p = ggplot(data = self.data, aesthetics = aes(x = 'kmer')) 
-        p = p + geom_area(aes(ymin = 0.0, ymax = 'shannon', alpha = 0.3, fill = 'blue'))
-        p = p + geom_bar(aes(y = 'contigs', alpha = 0.3, colour = 'red'))
-        #p = p + geom_segment(aes(x = 'starts', xend = 'stops', y = yrange, yend = yrange))
+        plt.plot(self.data["kmer"], self.data["shannon"], color = 'blue')
+        plt.fill_between(self.data["kmer"], self.data["shannon"], 0, alpha = 0.3) 
 
-        print p
+        plt.bar(self.data["kmer"], self.data["contigs"], color = 'red', alpha = 0.3)
+        plt.xlim(0, max(self.data["kmer"]))
+        plt.show()
