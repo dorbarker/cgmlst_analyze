@@ -31,50 +31,52 @@ class Kmer(object):
 # 3 probability to ignore contig
 
 class Individual(object):
+    
+    alleles = (0,1)
+    functions = {'entry': 0, 'left': 1, 'right': 2, 'contig_pass': 3}
 
     def __init__(self,  sequence, penalty, crossover_rate, 
                  point_mutation_rate, chromosome = None):
+        
+        self.motif = None 
+        self.region_indices = None
         
         self.crossover_rate = crossover_rate
         self.point_mutation_rate = point_mutation_rate
         self.penalty = penalty
         self.sequence = sequence 
-        self.chromosome = chromosome or self.create_chromosome()
-        self.region_indices = None
+        self.chromosome = self.create_chromosome(chromosome)
         self.score = 0
         
+        print self.motif
+
         self.calculate_score()
     
-    def create_chromosome(self):
+    def create_chromosome(self, chromosome):
 
-        m = len(self.sequence)
+        seq_len = len(self.sequence)
+        bin_seq_len = bin(seq_len).lstrip('0b')
         
-        entry = random.randrange(0,m)
-        r_width = random.randrange(0, m)
-        l_width = random.randrange(0, m)
-        contig_pass = random.random()
-
-        return [entry, r_width, l_width, contig_pass]
+        motif = len(bin_seq_len) 
+        self.motif = motif
+        
+        # entry point, left and right widths, and contig pass 
+        # encoded in regions of length motif
+        if chromosome == None:
+            initialize = lambda x: [random.choice(self.alleles) for i in range(x)]   
+            l = [initialize(motif) for x in range(4)]
+            out = [x for y in l for x in y]
+        else:
+            out = chromosome
+        
+        return out 
 
     def point_mutation(self, gene):
-        """Alters the value of a single gene by a small amount
-        Larger changes are less likely than smaller ones"""
-        
-        def delta_probabilities():
-            out = []
-            for i in range(1,6):
-                out.extend([i for x in range(100 / i) * 100])
-            out.extend([-x for x in out])
-            return out
+        """Randomly mutates a gene.
+        May bit flip or return the starting allele
+        """
 
-        deltas = delta_probabilities()
-        delta_float =  map(lambda x: x / 100., deltas)
-        
-        if type(gene) == int:
-            self.chromosome[gene] += random.choice(deltas)
-
-        else:
-            self.chromosome[gene] += random.choice(delta_float)
+        self.chromosome[gene] = random.choice(self.alleles)
 
     def crossover(self, other):
 
@@ -94,19 +96,36 @@ class Individual(object):
                         self.point_mutation_rate, chromosome = child2_chromosome)
 
         return [child1, child2]
+    
+    def decimalize_functions(self):
 
-    def fix_chromosome(self):
+        sub = lambda thing: self.chromosome_function_indices(thing)
+        subseq = lambda thing: self.chromosome[sub(thing)[0] : sub(thing)[1]]
+        
+        return {thing: self.decimalize_binary(subseq(self.functions[thing])) for thing in self.functions}
 
+    def decimalize_binary(self, binary_list):
+        """Converts binary subregion of chromosome to decimal"""    
+        
+        # start, stop = self.chromosome_function_indices(thing)
+        
+        # subset = self.chromosome[start : stop]
+
+        return int(''.join(map(str, binary_list)), 2)
+
+    def chromosome_function_indices(self, thing):
+        
+        chunk = thing * self.motif
+        
+        return chunk, chunk + self.motif
+        
+    #def fix_chromosome(self):
+
+    #    decimalized = self.decimalize_functions()
         # get left position
-        if self.chromosome[1] < 0:
-            self.chromosome[1] = 0 
+    #    if decimalized["entry"] - decimalized["left"] < 0:
+            
 
-        # fix contig extension probabilities
-        if self.chromosome[3] > 1.0:
-            self.chromosome[3] = 1.0
-
-        if self.chromosome[3] < 0.0:
-            self.chromosome[3] = 0.0
 
     def get_region(self):
     
@@ -137,20 +156,28 @@ class Individual(object):
             
             return start, stop
         
+        decimalized = self.decimalize_functions()
+
         # get left edge of inital region
-        left = self.chromosome[0] - self.chromosome[1]
-        if left < 0: left = 0
+        if decimalized['entry'] - decimalized['left'] < 0:
+            left = 0
+        else:
+            left = decimalized['entry'] - decimalized['left']
 
         # out of bounds doesn't matter - it's treated as len(sequence) + 1
-        right = self.chromosome[0] + self.chromosome[2]
+        right = decimalized['entry'] + decimalized['right']
 
         region = self.sequence[left : right + 1]
         length = len(region)
 
-        start, stop  = check_contigs(self, region)
-       
+        try: 
+            start, stop  = check_contigs(self, region)
+            out = region[start : stop], (left + start), (right - (length - stop))
+        except IndexError:
+            out = [], None, None
         # returns selected region and its location within overall sequence
-        return region[start : stop], (left + start), (right - (length - stop))
+        
+        return out
 
     def calculate_score(self):
 
