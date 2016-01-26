@@ -48,8 +48,6 @@ class Individual(object):
         self.chromosome = self.create_chromosome(chromosome)
         self.score = 0
         
-        print self.motif
-
         self.calculate_score()
     
     def create_chromosome(self, chromosome):
@@ -107,10 +105,6 @@ class Individual(object):
     def decimalize_binary(self, binary_list):
         """Converts binary subregion of chromosome to decimal"""    
         
-        # start, stop = self.chromosome_function_indices(thing)
-        
-        # subset = self.chromosome[start : stop]
-
         return int(''.join(map(str, binary_list)), 2)
 
     def chromosome_function_indices(self, thing):
@@ -119,40 +113,33 @@ class Individual(object):
         
         return chunk, chunk + self.motif
         
-    #def fix_chromosome(self):
-
-    #    decimalized = self.decimalize_functions()
-        # get left position
-    #    if decimalized["entry"] - decimalized["left"] < 0:
-            
-
-
     def get_region(self):
     
-        def check_contigs(self, region):
-
-            def get_edge(region, end, step):
-
+        def check_contigs(self, region, contig_pass):
+            
+            def get_edge(region, end, step, contig_pass):
+                
                 halfway = len(region) / 2
+                edge = None
                 
                 for kmer in range(halfway, end, step):
                     edge = kmer
                     broken = False
                     if region[kmer].contigs > 0:
                         for contig in range(region[kmer].contigs):
-                            if random.random() > self.chromosome[3]:
+                            if random.random() < contig_pass:
                                 edge = kmer + -step
                                 broken = True
                                 break
                         if broken:
                             break
                
-                if step == 1:
+                if step == 1 and edge != None:
                     edge += 1 
                 return edge
 
-            start = get_edge(region, -1, -1)
-            stop  = get_edge(region, len(region) - 1, 1)
+            start = get_edge(region, -1, -1, contig_pass)
+            stop  = get_edge(region, len(region) - 1, 1, contig_pass)
             
             return start, stop
         
@@ -167,22 +154,29 @@ class Individual(object):
         # out of bounds doesn't matter - it's treated as len(sequence) + 1
         right = decimalized['entry'] + decimalized['right']
 
+        # get probability of extending past a contig
+        max_bin = float(self.decimalize_binary(1 for x in range(self.motif)))
+        contig_pass = decimalized['contig_pass'] / max_bin 
+        
         region = self.sequence[left : right + 1]
         length = len(region)
-
+        
         try: 
-            start, stop  = check_contigs(self, region)
+            start, stop  = check_contigs(self, region, contig_pass)
             out = region[start : stop], (left + start), (right - (length - stop))
         except IndexError:
             out = [], None, None
+        except TypeError:
+            out = [], None, None
+
         # returns selected region and its location within overall sequence
         
         return out
 
     def calculate_score(self):
-
+        
         region, l_ind, r_ind = self.get_region()
-
+        
         self.score += sum(kmer.shannon for kmer in region)
         self.score -= sum(kmer.contigs * self.penalty for kmer in region)
         self.region_indices = (l_ind, r_ind)
@@ -202,18 +196,19 @@ class Individual(object):
 
     def __cmp__(self, other):
         
-        return cmp(self.score, other.score)
-
+        #return cmp(self.score, other.score)
+        return cmp(other.score, self.score)
 class Population(object):
 
-    def __init__(self, sequence, size, generations, crossover_rate,
+    def __init__(self, sequence, size, crossover_rate,
                  point_mutation_rate, penalty, elite):
         
+        self.size = size 
         self.sequence = sequence
         self.crossover_rate = crossover_rate
         self.point_mutation_rate = point_mutation_rate
         self.elite = elite
-        self.generations = generations
+        self.generations = 0  
 
         self.population = self.generate_population(sequence,
                                                    size, 
@@ -243,21 +238,23 @@ class Population(object):
                 offspring = [parent1.clone()]
             
             next_population.extend(offspring)
-        
+       
+        next_population = next_population[:self.size] # hack to force correct pop size
         self.population = next_population
 
     def step(self):
 
-        self.population.sort()
+        self.population.sort(reverse = True)
         self.selection()
         self.evolve()
         self.generations += 1
         
         # diagnostic
-        if self.generations % 100 == 0:  
-            print [x.chromosome for x in self.population]
+        if self.generations % 1000 == 0:  
+            
             reporter = StepReporter(self.sequence, self.population)
             reporter.plot_agents()
+
             
     def evolve(self):
         
@@ -327,12 +324,15 @@ class StepReporter(object):
         # float() and nested max() to dodge type errors
         maxvalue = float(max(max(self.data["contigs"]), max(self.data["shannon"])))
         slices = maxvalue / len(self.population)
-        
         yrange = arange(1.0, maxvalue + 1.0, slices)
 
         plt.plot(self.data["kmer"], self.data["shannon"], color = 'blue')
         plt.fill_between(self.data["kmer"], self.data["shannon"], 0, alpha = 0.3) 
 
         plt.bar(self.data["kmer"], self.data["contigs"], color = 'red', alpha = 0.3)
+        
+        plt.hlines(y = yrange, xmin = self.data["starts"], xmax = self.data["stops"])
+
+
         plt.xlim(0, max(self.data["kmer"]))
         plt.show()
