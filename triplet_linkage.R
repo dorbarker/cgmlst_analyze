@@ -1,4 +1,5 @@
 library(parallel)
+library(getopt)
 
 process_triples <- function(start_index, func, df) {
 
@@ -39,7 +40,7 @@ get_triples_by_flank <- function(df) {
 get_triples_by_centre <- function(df) {
 
     triples <- list()
-    for(i in 1:nrow(df)) {
+    for (i in 1:nrow(df)) {
 
         line <- df[i,]
         flank <- paste(line[1], line[3], sep = "_")
@@ -106,27 +107,72 @@ extract_stats <- function(triple_list) {
         "prop_largest_all_weighted" = weighted_proportion(names(triple_list))
     )
 }
-# Setup
-cgmlst <- read.table("~/Dropbox/2014_05_to_2014_08_Dillon_wgMLST_approaches/cgmlst_paper/allele_calls/cgmlst_calls.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
-rownames(cgmlst) <- cgmlst[,1]
-cgmlst <- cgmlst[,-1]
-first_col <- 1:(ncol(cgmlst)-2)
 
-## By Flank
 
-flank_triples <- mclapply(first_col, process_triples, func = get_triples_by_flank, df = cgmlst, mc.cores = 23)
-names(flank_triples) <- colnames(cgmlst)[first_col]
+options <- function() {
 
-stats_by_flank <- data.frame(t(sapply(flank_triples, extract_stats)))
-stats_by_flank$left_gene <- names(flank_triples)
-stats_by_flank <- stats_by_flank[,colnames(stats_by_flank)[c(ncol(stats_by_flank), 1:(ncol(stats_by_flank)-1))]]
+    #CLI args
+    spec <- matrix(c(
+        "help",  "h", "0", "logical",   "Print this help and exit",
+        "input", "i", "1", "character", "Path to allele calls",
+        "cores", "c", "1", "integer",   "Number of processor cores to use",
+        "out",   "o", "1", "character", "Out path"
+    ), byrow = TRUE, ncol = 5)
 
-# By Centre
+    opt <- getopt(spec)
 
-centre_triples <- mclapply(first_col, process_triples, func = get_triples_by_centre, df = cgmlst, mc.cores = 23)
-names(centre_triples) <- colnames(cgmlst)[first_col]
+    if (!is.null(opt$help)) {
+        cat(getopt(spec, usage = TRUE))
+        q(status = 1)
+    }
+    opt
+}
 
-stats_by_centre <- data.frame(t(sapply(centre_triples, extract_stats)))
-stats_by_centre$left_gene <- names(centre_triples)
-stats_by_centre <- stats_by_centre[,colnames(stats_by_centre)[c(ncol(stats_by_centre), 1:(ncol(stats_by_centre)-1))]]
+process <- function(data, f, cores) {
 
+    first <- 1:(ncol(data) - 2)
+
+    triples <- mclapply(first, process_triples,
+                        func = f, df = data, mc.cores = cores)
+
+    names(triples) <- colnames(data)[first]
+
+    stats <- data.frame(t(sapply(triples, extract_stats)))
+    stats$left_gene <- names(triples)
+
+    # reorder column names to put "left gene" in column 1
+    reorder <- colnames(stats)[c(ncol(stats), 1:(ncol(stats) - 1))]
+    stats <- stats[, reorder]
+
+    stats
+
+}
+
+main <- function() {
+
+    opt <- options()
+
+    ###### Setup #####
+
+    cgmlst <- read.table(opt$input, sep = ",", header = TRUE,
+                         stringsAsFactors = FALSE, row.names = 1)
+
+    ##### By Flank #####
+
+    stats_by_flank <- process(cgmlst, get_triples_by_flank, opt$cores)
+
+    ##### By Centre #####
+
+    stats_by_centre <- process(cgmlst, get_triples_by_centre, opt$cores)
+
+    write.csv(stats_by_flank,
+              file = paste(opt$out, "triplet_flanks.csv", sep = "/"),
+              row.names = FALSE, quote = FALSE)
+
+    write.csv(stats_by_centre,
+              file = paste(opt$out, "triplet_centres.csv", sep = "/"),
+              row.names = FALSE, quote = FALSE)
+
+}
+
+main()
