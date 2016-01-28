@@ -116,7 +116,7 @@ options <- function() {
         "help",  "h", "0", "logical",   "Print this help and exit",
         "input", "i", "1", "character", "Path to allele calls",
         "cores", "c", "1", "integer",   "Number of processor cores to use",
-        "out",   "o", "1", "character", "Out path"
+        "out",   "o", "1", "character", "Out directory"
     ), byrow = TRUE, ncol = 5)
 
     opt <- getopt(spec)
