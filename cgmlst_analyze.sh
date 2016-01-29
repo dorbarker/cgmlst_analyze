@@ -25,13 +25,13 @@ while test $# -gt 0; do
             echo "--cores            Number of CPU cores to use for parallel tasks (default = all available)."
             echo "--gene-select      Comma-seperated list of numbers of genes to subset."
             echo "--replicates       Number of replicates for gene subsetting (default = 1000)."
+            echo "--prediction-width Comma-seperated list of number of genes to consider for allele prediction."
             exit 0
             ;;
         
         --work-dir)
             shift
             if test $# -gt 0; then
-                
                 export WORKDIR=$(echo $(fullpath "$1"))/
             else
                 echo "You need to give me a work directory."
@@ -71,6 +71,15 @@ while test $# -gt 0; do
             fi
             shift
             ;;
+        --prediction-widths)
+            shift
+            if test $# -gt 0; then
+               export PREDWIDTH=$1
+            else
+                echo "You need to specify allele prediction widths."
+            fi
+            shift
+            ;;
 
     esac
 done
@@ -85,19 +94,17 @@ done
     # N clusters
     # Export computed clusters
 
-### TODO Add CLI option for n_genes, replicates
-
 
 ### Generate gene subsets ###
 printf "\nGenerating gene subsets.\n"
 Rscript ${SCRIPT_DIR}/pre_compute_clusters.R --input core_calls.csv \
-                                             --n_select 7,21,54,100,150,200,250,500,600 \
-                                             --replicates 1000 \
+                                             --n_select $GENESELECT \
+                                             --replicates $REPLICATES\
                                              --cores $CORES \
-                                             --outdir ${WORKDIR}/pre_computed_clusters
+                                             --outdir ${WORKDIR}/pre_computed_clusters/
 
 ### Compare gene subsets to reference clusters ###
-prinf "\nComparing gene subsets to the reference set.\n"
+printf "\nComparing gene subsets to the reference set.\n"
 Rscript ${SCRIPT_DIR}/compare_gene_subsets_to_reference.R --input ${WORKDIR}/pre_computer_clusters \
                                                           --out   ${WORKDIR}/gene_subset_metrics.csv \
                                                           --cores $CORES
@@ -113,13 +120,20 @@ Rscript ${SCRIPT_DIR}/compare_gene_subsets_to_reference.R --input ${WORKDIR}/pre
 
 # Allele imputation
     
-    # Naive association
-
-printf "\nFinding naive triplet associations.\n"
+### Naive association ###
+printf "\nFinding allele associations - naive.\n"
 mkdir ${WORKDIR}/triplets
 Rscript ${SCRIPT_DIR}/triplet_linkage.R --input ${WORKDIR}/core_calls.csv \
                                         --out  ${WORKDIR}/triplets/ \
                                         --cores $CORES
+### Machine learning ###
+printf "\nFinding allele associations - random forest\n"
+Rscript ${SCRIPT_DIR}/allele_associations_ml.R  --input ${WORKDIR}/core_calls.csv \
+                                                --out ${WORKDIR}/ \
+                                                --min 5 \
+                                                --width $PREDWIDTH \
+                                                --train 0.1 \
+                                                --trees $REPLICATES \
+                                                --cores $CORES
 
 
-    # Machine learning
