@@ -14,6 +14,22 @@ get_ordered_clusters <- function(ref_calls, selection) {
     clusts[order(names(clusts))]
 }
 
+ref_clusters <- function(ref_calls, outdir) {
+
+    d <- dist.gene(ref_calls)
+    hc <- hclust(d, "complete")
+
+    # Cuts at all possible numbers of gene differences
+    clusts <- cutree(hc, h = unique(c(0, 0:ncol(ref_calls))))
+
+    reference_df <- data.frame(clusts[order(names(rowclusts)),],
+                               stringsAsFactors = FALSE,
+                               check.names = FALSE)
+
+    write.csv(reference_df, file = paste0(outdir, "/", "reference.csv"),
+              row.names = TRUE, quote = FALSE)
+}
+
 bootstrap_factory <- function(n_select, ref_calls) {
 
     n_genes <- ncol(ref_calls)
@@ -98,6 +114,9 @@ main <- function() {
 
     # Load reference calls from which subsets will be chosen
     ref_calls <- read.csv(opt$input, stringsAsFactors = FALSE, row.names = 1)
+
+    # Computer ref clusters over all thresholds and write out
+    ref_clusters(ref_calls, opt$outdir)
 
     for (n_gene in opt$n_select) {
     cluster_df <- compute_clusters(n_select = n_gene,
