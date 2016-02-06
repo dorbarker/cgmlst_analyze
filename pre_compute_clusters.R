@@ -22,7 +22,7 @@ ref_clusters <- function(ref_calls, outdir) {
     # Cuts at all possible numbers of gene differences
     clusts <- cutree(hc, h = unique(c(0, 0:ncol(ref_calls))))
 
-    reference_df <- data.frame(clusts[order(names(rowclusts)),],
+    reference_df <- data.frame(clusts[order(rownames(clusts)),],
                                stringsAsFactors = FALSE,
                                check.names = FALSE)
 
@@ -71,15 +71,12 @@ compute_clusters <- function(n_select, ref_calls, cores, replicates) {
 write_clusters <- function(n_select, cluster_df, outdir) {
 
     # Create the output directory if it does not exist
-    if (!dir.exists(outdir)) {
-        dir.create(outdir)
-    }
 
     outname <- paste0(outdir, "/", n_select, "_clusters.csv")
 
     write.csv(cluster_df, file = outname, row.names = TRUE, quote = FALSE)
 
-    cat(paste("\n", "Clusters written to:", outname, "\n"))
+    cat(paste0("\n", "Clusters written to: ", outname, "\n"))
 }
 
 options <- function() {
@@ -103,7 +100,7 @@ options <- function() {
         cat(getopt(spec, usage = TRUE))
         q(status = 1)
     }
-    opt$n_select <- as.integer(strsplit(opt$n_select, ","))
+    opt$n_select <- as.integer(strsplit(opt$n_select, ",")[[1]])
 
     opt
 }
@@ -112,6 +109,11 @@ main <- function() {
 
     opt <- options()
 
+    # Create output directory
+    if (!dir.exists(opt$outdir)) {
+        dir.create(opt$outdir)
+    }
+
     # Load reference calls from which subsets will be chosen
     ref_calls <- read.csv(opt$input, stringsAsFactors = FALSE, row.names = 1)
 
@@ -119,13 +121,15 @@ main <- function() {
     ref_clusters(ref_calls, opt$outdir)
 
     for (n_gene in opt$n_select) {
-    cluster_df <- compute_clusters(n_select = n_gene,
-                                   ref_calls = ref_calls,
-                                   cores = opt$cores,
-                                   replicates = opt$reps)
 
-    write_clusters(opt$n_select, cluster_df, opt$outdir)
-    }
+        cluster_df <- compute_clusters(n_select = n_gene,
+                                       ref_calls = ref_calls,
+                                       cores = opt$cores,
+                                       replicates = opt$replicates)
+
+        write_clusters(n_gene, cluster_df, opt$outdir)
+
+        }
 }
 
 main()

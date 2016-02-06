@@ -16,7 +16,7 @@ function fullpath {
 
 
 while test $# -gt 0; do
-
+    
     case "$1" in
         
         -h|--help)
@@ -32,7 +32,7 @@ while test $# -gt 0; do
         --work-dir)
             shift
             if test $# -gt 0; then
-                export WORKDIR=$(echo $(fullpath "$1"))/
+                export WORKDIR=$(echo $(fullpath "$1"))
             else
                 echo "You need to give me a work directory."
                 exit 1
@@ -71,16 +71,21 @@ while test $# -gt 0; do
             fi
             shift
             ;;
+
         --prediction-widths)
             shift
             if test $# -gt 0; then
                export PREDWIDTH=$1
             else
                 echo "You need to specify allele prediction widths."
+                exit 1
             fi
             shift
             ;;
-
+        *)
+            echo "Unexpected argument $1"
+            exit 1
+            ;;
     esac
 done
 
@@ -97,7 +102,7 @@ done
 
 ### Generate gene subsets ###
 printf "\nGenerating gene subsets.\n"
-Rscript ${SCRIPT_DIR}/pre_compute_clusters.R --input core_calls.csv \
+Rscript ${SCRIPT_DIR}/pre_compute_clusters.R --input ${WORKDIR}/core_calls.csv \
                                              --n_select $GENESELECT \
                                              --replicates $REPLICATES\
                                              --cores $CORES \
@@ -105,9 +110,12 @@ Rscript ${SCRIPT_DIR}/pre_compute_clusters.R --input core_calls.csv \
 
 ### Compare gene subsets to reference clusters ###
 printf "\nComparing gene subsets to the reference set.\n"
-Rscript ${SCRIPT_DIR}/compare_gene_subsets_to_reference.R --input ${WORKDIR}/pre_computer_clusters \
+Rscript ${SCRIPT_DIR}/compare_gene_subsets_to_reference.R --input ${WORKDIR}/pre_computed_clusters \
                                                           --out   ${WORKDIR}/gene_subset_metrics.csv \
                                                           --cores $CORES
+
+echo "Diagnostic"
+exit 0
 
 # Optimized subregions
     # Map contigs
@@ -127,7 +135,7 @@ Rscript ${SCRIPT_DIR}/triplet_linkage.R --input ${WORKDIR}/core_calls.csv \
                                         --out  ${WORKDIR}/triplets/ \
                                         --cores $CORES
 ### Machine learning ###
-printf "\nFinding allele associations - random forest\n"
+#printf "\nFinding allele associations - random forest\n"
 Rscript ${SCRIPT_DIR}/allele_associations_ml.R  --input ${WORKDIR}/core_calls.csv \
                                                 --out ${WORKDIR}/ \
                                                 --min 5 \

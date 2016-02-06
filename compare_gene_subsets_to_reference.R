@@ -1,7 +1,11 @@
 library(getopt)
 library(parallel)
 
-source("./partition_metrics.R")
+initial_options <- commandArgs(trailingOnly = FALSE)
+file.arg.name <- "--file="
+script_name <- sub(file.arg.name, "", initial_options[grep(file.arg.name, initial_options)])
+source_path <- paste(dirname(script_name),"partition_metrics.R", sep = "/")
+source(source_path)
 
 compare_partitions <- function(seed, n_genes, iterations, thresh, ref_thresholds) {
     # Calculate the Adjusted Wallace Coefficient and Cluster Cohesion
@@ -9,7 +13,6 @@ compare_partitions <- function(seed, n_genes, iterations, thresh, ref_thresholds
 
     iteration <- iterations[,seed]
     ref_thresh <- ref_thresholds[,thresh]
-
 
     awc <- adj_wallace(iteration, ref_thresh)
 
@@ -33,14 +36,27 @@ compare_to_ref <- function(n_genes, method_iterations, ref_thresholds, cores) {
         lapply(seq_along(method_iterations),
                          compare_partitions,
                          iterations = method_iterations,
-                         ref_thresh = ref_thresholds,
+                         ref_thresholds = ref_thresholds,
                          thresh = i,
                          n_genes = n_genes
                         )
 
 
     }, mc.cores = cores)
-
+#     l <- list()
+#     for (i in 1:ncol(ref_thresholds)) {
+#         l2 <- list()
+#         for (x in seq_along(method_iterations)) {
+#             l2[[x]] <- compare_partitions(seed = x,
+#                                n_genes = n_genes,
+#                                iterations = method_iterations,
+#                                ref_thresholds = ref_thresholds,
+#                                thresh = i
+#             )
+#         }
+#         l[[i]] <- l2
+#     }
+    print(str(l))
     # kludge to convert to nice data.frame
     df <- do.call('rbind', do.call('rbind', l))
     df <- df[, colnames(df)[c(3, 1, 2, 4, 5, 6, 7)] ]
@@ -56,7 +72,7 @@ load_data <- function(precomp_cluster_dir, cores) {
         # used to calculate the clusters
 
         name <- basename(tools::file_path_sans_ext(x))
-        pos <- c(gregexpr("\\d", name))
+        pos <- c(gregexpr("\\d", name)[[1]])
         int_name <- as.integer(substr(name, min(pos), max(pos)))
 
         list(
@@ -67,7 +83,7 @@ load_data <- function(precomp_cluster_dir, cores) {
     }
 
     files <- list.files(precomp_cluster_dir, full.names = TRUE)
-    reference_index <- grep(files, "reference\\.csv")
+    reference_index <- grep("reference\\.csv", files)
 
     reference <- read.csv(files[reference_index],
                           row.names = 1,
@@ -75,9 +91,8 @@ load_data <- function(precomp_cluster_dir, cores) {
 
     files <- files[-reference_index]
 
-    list("submethods" = mclapply(files, extract_info, mc.cores = cores),
+    list("submethods" = lapply(files, extract_info ),
          "reference" = reference)
-
 }
 options <- function() {
 
@@ -101,17 +116,20 @@ options <- function() {
 main <- function() {
 
     opt <- options()
-
     data <- load_data(opt$input, opt$cores)
+
     l <- lapply(data$submethods, function(submethod) {
 
         compare_to_ref(n_genes = submethod$genes,
-                       method_iterations = 1:ncol(submethod$clusters),
-                       ref_thresholds = data$ref_thresholds,
+                       method_iterations = submethod$clusters,
+                       ref_thresholds = data$reference,
                        cores = opt$cores)
     })
-
+    print("2")
     out_df <- do.call('rbind', l)
-
+    print("3")
     write.csv(out_df, file = opt$out, row.names = FALSE, quote = FALSE)
+    print("4")
 }
+
+main()
